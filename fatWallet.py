@@ -9,51 +9,66 @@ imgFolder = os.getcwd() + '\\bmp\\'
 
 def gridData():
     return {'category': (('CategoryId', 'Name', 'ParentId'),
-                           {'All':'select * from category'},
+                           {'all':'select * from category',
+                            'id':'select max(CategoryId) from category',
+                            'filter':'select * from category '},
                            'insert into category values (?, ?, ?)',
                            'update category set Name=?, ParentId=? where CategoryId=?',
                            'delete from category where CategoryId=?'),
             'item': (('Name', 'Category'),
-                           {'All':'select i.Name, \
+                           {'all':'select i.Name, \
                                (select c.Name from category c where c.CategoryId = i.CategoryId) from item i', 
-                               'id': 'select * from item where '},
+                               'id': 'select max(ItemId) from item',
+                               'filter': 'select i.Name, \
+                               (select c.Name from category c where c.CategoryId = i.CategoryId) from item i'
+                               },
                            'insert into item values (?, ?, ?)',
                            'update item set Name=?, CategoryId=? where ItemId=?',
                            'delete from item where ItemId=?') ,
             'account': (('AccountId', 'Name', 'CurrencyId'),
-                           {'All':'select * from account', 'id': 'select * from account where '},
+                           {'all':'select * from account', 
+                            'id':'select max(AccountId) from account', 
+                            'filter': 'select * from account '},
                            'insert into account values (?, ?, ?)',
                            'update account set Name=?, CurrencyId=? where AccountId=?',
                            'delete from account where AccountId=?'),
-            'currency': (('CurrencyId', 'ShortName', 'FullName', 'Code'),
-                           {'All':'select * from currency', 'id': 'select * from currency where '},
+            'currency': (('Short Name', 'Full Name', 'Code'),
+                           {'all':'select ShortName, FullName, Code from currency', 
+                            'id': 'select max(CurrencyId) from currency',
+                            'filter': 'select * from currency '},
                            'insert into currency values (?, ?, ?, ?)',
                            'update item set ShortName=?, FullName=?, Code=? where CurrencyId=?',
                            'delete from currency where CurrencyId=?'),
             'organization': (('OrganizationId', 'Name'),
-                           {'All':'select * from organization', 'id': 'select * from organization where '},
+                           {'all':'select * from organization', 
+                            'id':'select max(OrganizationId) from organization',
+                            'filter': 'select * from organization '},
                            'insert into organization values (?, ?)',
                            'update organization set Name=? where OrganizationId=?',
                            'delete from organization where OrganizationId=?'), 
             'payment': (('PayDate', 'Account', 'Organization', 'Category', 'Item', 'Price', 'Count', 'Total'), # %H:%M:%S
-                           {'All':"select strftime('%m/%d/%Y', PayDate), \
+                           {'all':"select strftime('%m/%d/%Y', PayDate), \
                            (select a.Name from account a where a.AccountId = e.AccountId),\
                            (select o.Name from organization o where o.OrganizationId = e.OrganizationId), \
                            (select c.Name from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId), \
                            (select i.Name from item i where i.ItemId = e.ItemId),\
                            Price, Count, Sum\
-                           from payment e", 'id': 'select * from payment where '},
+                           from payment e", 
+                           'id': 'select max(PaymentId) from payment',
+                           'filter': 'select * from payment '},
                            'insert into payment values (?, ?, ?, ?, ?, ?, ?, ?)',
                            'update payment set PayDate=?, AccountId=?, ItemId=?, OrganizationId=?, Price=?, Count=?, Sum=? where PaymentId=?',
                            'delete from payment where PaymentId=?'), 
             'income': (('IncomeDate', 'Account', 'Organization', 'Category', 'Item', 'Sum'), # %H:%M:%S
-                           {'All':"select strftime('%m/%d/%Y', IncomeDate), \
+                           {'all':"select strftime('%m/%d/%Y', IncomeDate), \
                            (select a.Name from account a where a.AccountId = e.AccountId),\
                            (select o.Name from organization o where o.OrganizationId = e.OrganizationId), \
                            (select c.Name from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId), \
                            (select i.Name from item i where i.ItemId = e.ItemId),\
                            Sum\
-                           from income e", 'id': 'select * from income where '},
+                           from income e", 
+                           'id': 'select max(IncomeId) from income',
+                           'filter': 'select * from income '},
                            'insert into income values (?, ?, ?, ?, ?, ?)',
                            'update income set IncomeDate=?, AccountId=?, ItemId=?, OrganizationId=?, Sum=? where IncomeId=?'
                            'delete from income where IncomeId=?'), 
@@ -63,16 +78,16 @@ def gridData():
 def makeChoice(tableName):
     selection = DBData.selectRows(tableName)
     return [item[1] for item in selection if item[1] is not None]  #if item[1] is not None else '' 
-    
+
 def dialogData():  
     """
         Structure: 
         { dialog name: ((what kind of element to add, label, style, proportion, flags))
         }
     """
-    return {'payment': (
+    return {'StaticText': (
                         ((wx.StaticText, 'Date', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.adv.DatePickerCtrl, wx.DateTime().Now(), wx.adv.DP_DROPDOWN, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL), 
+                            (wx.adv.DatePickerCtrl, wx.DateTime().Now(), wx.adv.DP_DROPDOWN, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'date'), 
                             (wx.StaticText, 'Account', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
                             (wx.ComboBox, 'Select account...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'account', makeChoice('account'))
                             ), 
@@ -86,28 +101,28 @@ def dialogData():
                             (wx.ComboBox, 'Select item...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'item', makeChoice('item'))
                             ),
                         ((wx.StaticText, 'Price', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL), 
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'price'), 
                             (wx.StaticText, 'Count', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'count')
                             ),
                         ((wx.StaticText, 'Total', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'total')
                             ),    
                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
                         ),
             'currency': (
                         ((wx.StaticText, 'Full Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'fullname')
                             ),
                         ((wx.StaticText, 'Short name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'shortname')
                             ),
                         ((wx.StaticText, 'Code', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+                            (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'code')
                             ),    
                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
-                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL), 'cancel')
+                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
                         ),
             'account': (
                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -117,7 +132,7 @@ def dialogData():
                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
                             ),
                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
-                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL), 'cancel')
+                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
                         ),
             'item': (
                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -127,7 +142,7 @@ def dialogData():
                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
                             ),
                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
-                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL), 'cancel')
+                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
                         ),
             'category': (
                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -137,9 +152,86 @@ def dialogData():
                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
                             ),
                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
-                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL), 'cancel')
+                         (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
                         )
             } 
+    
+# def dialogData():  
+#     """
+#         Structure: 
+#         { dialog name: ((what kind of element to add, label, style, proportion, flags))
+#         }
+#     """
+#     return {'payment': (
+#                         ((wx.StaticText, 'Date', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.adv.DatePickerCtrl, wx.DateTime().Now(), wx.adv.DP_DROPDOWN, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL), 
+#                             (wx.StaticText, 'Account', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select account...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'account', makeChoice('account'))
+#                             ), 
+#                         ((wx.StaticText, 'Organization', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select organization...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'organization', makeChoice('organization'))
+#                             ),
+#                         ((wx.StaticText, 'Category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'category', makeChoice('category'))
+#                             ),
+#                         ((wx.StaticText, 'Item', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select item...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'item', makeChoice('item'))
+#                             ),
+#                         ((wx.StaticText, 'Price', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL), 
+#                             (wx.StaticText, 'Count', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Total', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),    
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#                         ),
+#             'currency': (
+#                         ((wx.StaticText, 'Full Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Short name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Code', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),    
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#                         ),
+#             'account': (
+#                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Currency', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
+#                             ),
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#                         ),
+#             'item': (
+#                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Currency', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
+#                             ),
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#                         ),
+#             'category': (
+#                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Currency', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'currency', makeChoice('account'))
+#                             ),
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#                         )
+#             } 
 
 class MainFrame(wx.Frame):
     def __init__(self, parent):
@@ -167,10 +259,10 @@ class MainFrame(wx.Frame):
                  ),
                 ("&Dictionary", 
                     (
-                     ("&Account", "Accounts list", self.OnEvent),
+                     ("&Account", "Accounts list", self.OnAccountList),
                      ("&Currency", "Currency list", self.OnCurrencyList),
                      ("Category and &items", "Category and items list", self.OnCategoryList),
-                     ("&Companies", "C", self.OnEvent),
+                     ("&Organizations", "C", self.OnOrganizationList),
                      ("", "", "")
                     )
                 ),
@@ -186,7 +278,10 @@ class MainFrame(wx.Frame):
                 ))
                 ]
     
-    def OnEvent(self, event): pass
+    def OnAccountList(self, event):
+        accountDialog = AccountDialog()
+        accountDialog.ShowModal()
+        accountDialog.Destroy()
     
     def OnCurrencyList(self, event):
         curDialog = CurrencyDialog()
@@ -197,6 +292,11 @@ class MainFrame(wx.Frame):
         catDialog = CategoryDialog()
         catDialog.ShowModal()
         catDialog.Destroy()
+        
+    def OnOrganizationList(self, event):
+        orgDialog = OrgDialog()
+        orgDialog.ShowModal()
+        orgDialog.Destroy()
         
     def OnPaymentList(self, event):
         try:
@@ -271,6 +371,9 @@ class MainFrame(wx.Frame):
                 ("Profit", imgFolder+"incomes.png", "Add income", self.OnEvent),
                 ("", "", "", ""),
                 ("Planning", imgFolder+"plan.png", "Planning", self.OnEvent))
+        
+    def OnEvent(self, e):
+        pass
                                                   
                                                   
     def createColorTool(self, toolbar, color):                # (4) Создание инструментов выбора цвета
@@ -411,10 +514,11 @@ class CategoryDialog(wx.Dialog):
         self.itemGrid = MyGrid(gridPanel, 'item', gridPopupMenuData('item'))
         self.itemGrid.Fit()
         
-        closeBtn = wx.Button(self.panel, label="lose")
+        closeBtn = wx.Button(self.panel, label="Close")
         closeBtn.Bind(wx.EVT_BUTTON, self.onSendAndClose)
 
-#         mainSizer = wx.GridBagSizer(hgap=2, vgap=2)
+        buts = ActionButtons(self.panel, self.tableName)
+        buts.actionSizer.InsertSpacer(0, 25)
         
         mainSizer = wx.BoxSizer(wx.HORIZONTAL)
         catSizer = wx.BoxSizer(wx.VERTICAL)
@@ -428,6 +532,7 @@ class CategoryDialog(wx.Dialog):
         itemSizer.Add(gridPanel, 1, wx.ALL|wx.EXPAND, 10)
         itemSizer.Add(closeBtn, 0, wx.ALL|wx.RIGHT, 10)
         mainSizer.Add(itemSizer, 1, wx.EXPAND)
+        mainSizer.Add(buts.actionSizer, 0, wx.ALL, 10)
         
         self.panel.SetSizer(mainSizer)
     
@@ -459,7 +564,7 @@ class CategoryDialog(wx.Dialog):
     def createPopupMenu(self, PopupMenuData):
         popupmenu = wx.Menu()
         for text in PopupMenuData(self.tableName):
-            print(text)
+#             print(text)
             item = popupmenu.Append(-1, text)
             self.Bind(wx.EVT_MENU, self.OnPopupItemSelected, item)
         return popupmenu
@@ -516,12 +621,12 @@ class CategoryDialog(wx.Dialog):
         else:
             if treeItem is not None and self.tree.GetItemData(treeItem) is not None:  # if a tree item doesn't have DB ID, than it's a new one and no need to select anything
                 catItemId = self.tree.GetItemData(treeItem)
-#                 self.itemGrid.table.selection = self.data.selectRows('item', cond='id', CategoryId=catItemId)
-                self.itemGrid.table.selection = self.data.selectRows('item', ' where CategoryId = %s' % (catItemId))
-                self.itemGrid.table.nrows = len(self.itemGrid.table.selection)
+#                 self.itemGrid.table.selection = self.data.selectRows('item', cond='filter', CategoryId=catItemId)
+                self.itemGrid.table.selection = self.data.selectRows('item', 'filter', ' where CategoryId = %s' % (catItemId))
+#                 self.itemGrid.table.nrows = len(self.itemGrid.table.selection)
             
     def OnEndLabelEdit(self, event):
-        print('OnEndLabelEdit')
+#         print('OnEndLabelEdit')
         treeItem = event.GetItem()
         if event.GetLabel().strip() != '': 
             if self.tree.GetItemData(treeItem) is None: # if an item doesn't have DB ID, than it's a new one       
@@ -532,11 +637,7 @@ class CategoryDialog(wx.Dialog):
                 
                 
     #             if popupMenuText == 'Add category':
-                self.selection = self.data.selectRows(self.tableName) #selects category from DB
-                #looking for ID for new row 
-                if len(self.selection) != 0:
-                    maxId = max(row[0] for row in self.selection)
-                else: maxId = 0 
+                maxId = self.data.getMaxID(self.tableName) 
                 
                 parentItemData = self.tree.GetItemData(self.tree.GetItemParent(treeItem))
                 if parentItemData == 'root':
@@ -597,36 +698,92 @@ class CategoryDialog(wx.Dialog):
         #pub.sendMessage("mainListener", message="test2", arg2="2nd argument!")
         self.Close()
 
-class CurrencyDialog(wx.Dialog):
+class ActionButtons:
+    def __init__(self, parent, tableName):
+        self.tableName = tableName
+        self.actionSizer = wx.BoxSizer(wx.VERTICAL)
+
+        buttons = ((imgFolder+"new.png", self.OnNewClick, 'add'), 
+                   (imgFolder+"edit.png", self.OnEditClick, 'edit'), 
+                   (imgFolder+'delete.png', self.OnDeleteClick, 'delete'))
+        for but in buttons:
+            img = wx.Image(but[0]).Scale(48, 48, wx.IMAGE_QUALITY_HIGH)
+            self.button = wx.BitmapButton(parent, -1, img.ConvertToBitmap())
+            self.button.SetToolTip(wx.ToolTip("Click here to %s" % but[2]))
+            self.button.Bind(wx.EVT_BUTTON, but[1])
+            self.actionSizer.Add(self.button)
+            
+    def OnNewClick(self, event):
+        pass
+    
+    def OnEditClick(self, event):
+        pass
+    
+    def OnDeleteClick(self, event):
+        pass
+    
+class MyDialog(wx.Dialog):
     #----------------------------------------------------------------------
-    def __init__(self):
-        wx.Dialog.__init__(self, None, wx.ID_ANY, "Currency", style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, size=(700,500))
-        self.panel = wx.Panel(self)
-        curLabel = wx.StaticText(self.panel, -1, 'Currency')
-        self.tableName = 'currency'
+    def __init__(self, table):
+        wx.Dialog.__init__(self, None, wx.ID_ANY, table, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, size=(700,500))
+        mainPanel = wx.Panel(self)
+#         curLabel = wx.StaticText(self.panel, -1, table)
+        self.tableName = table.lower()
         self.data = DBData
         self.selection = self.data.selectRows(self.tableName) 
         
-        curPanel = wx.Panel(self.panel, style=wx.SUNKEN_BORDER)
-        self.curGrid = MyGrid(curPanel, 'currency', gridPopupMenuData(self.tableName))
+        curPanel = wx.Panel(mainPanel, style=wx.SUNKEN_BORDER)
+        self.curGrid = MyGrid(curPanel, self.tableName, gridPopupMenuData(self.tableName))
         
         self.curGrid.Fit()
         
-        closeBtn = wx.Button(self.panel, label="Close")
-        closeBtn.Bind(wx.EVT_BUTTON, self.onSendAndClose)
+        closeBtn = wx.Button(mainPanel, label="Close")
+        closeBtn.Bind(wx.EVT_BUTTON, self.onClose)
 
-#         mainSizer = wx.GridBagSizer(hgap=2, vgap=2)
+        buts = ActionButtons(mainPanel, self.tableName)
         
         mainSizer = wx.BoxSizer(wx.HORIZONTAL)
         curSizer = wx.BoxSizer(wx.VERTICAL)
-        curSizer.Add(curLabel, 0, wx.LEFT|wx.TOP|wx.RIGHT, 10)
+#         curSizer.Add(curLabel, 0, wx.LEFT|wx.TOP|wx.RIGHT, 10)
         curSizer.Add(curPanel, 1, wx.ALL|wx.EXPAND, 10)
         curSizer.Add(closeBtn, 0, wx.ALL|wx.RIGHT, 10)
+        
         mainSizer.Add(curSizer, 1, wx.EXPAND)
+        mainSizer.Add(buts.actionSizer, 0, wx.ALL, 10)
+        mainPanel.SetSizer(mainSizer) 
         
-        self.panel.SetSizer(mainSizer) 
+    #----------------------------------------------------------------------
+    
         
-        #----------------------------------------------------------------------
+    def onClose(self, event):
+        """
+        Send a message and close frame
+        """
+        #msg = self.msgTxt.GetValue()
+        #pub.sendMessage("mainListener", message='test1')
+        #pub.sendMessage("mainListener", message="test2", arg2="2nd argument!")
+#         self.ToggleWindowStyle(wx.STAY_ON_TOP)
+        self.Close() 
+
+
+        
+class AccountDialog(MyDialog):
+    #----------------------------------------------------------------------
+    def __init__(self):
+        MyDialog.__init__(self, "Account")
+        
+        
+class CurrencyDialog(MyDialog):
+    #----------------------------------------------------------------------
+    def __init__(self):
+        MyDialog.__init__(self, "Currency")
+        
+class OrgDialog(MyDialog):
+    #----------------------------------------------------------------------
+    def __init__(self):
+        MyDialog.__init__(self, "Organization")
+               
+    #----------------------------------------------------------------------
 class MyFrame(wx.Frame):
     def __init__(self, parent, table, gridPopupMenuData):
         wx.Frame.__init__(self, parent, wx.ID_ANY, title=table, size=(700,500))
@@ -637,24 +794,14 @@ class MyFrame(wx.Frame):
         self.selection = self.data.selectRows(self.tableName) 
         
         gridPanel = wx.Panel(mainPanel, style=wx.SUNKEN_BORDER)
-        self.grid = MyGrid(gridPanel, self.tableName, gridPopupMenuData(table))
+        self.grid = MyGrid(gridPanel, self.tableName, gridPopupMenuData(self.tableName))
         
         self.grid.Fit()
         
         closeBtn = wx.Button(mainPanel, label="Close")
         self.Bind(wx.EVT_BUTTON, self.onClose, closeBtn)
         
-        actionSizer = wx.BoxSizer(wx.VERTICAL)
-
-        buttons = ((imgFolder+"new.png", self.OnClickPlus, 'add'), 
-                   (imgFolder+"edit.png", self.OnClickMinus, 'edit'), 
-                   (imgFolder+'delete.png', self.OnClickDelete, 'delete'))
-        for but in buttons:
-            img = wx.Image(but[0]).Scale(48, 48, wx.IMAGE_QUALITY_HIGH)
-            self.button = wx.BitmapButton(mainPanel, -1, img.ConvertToBitmap())
-            self.button.SetToolTip(wx.ToolTip("Click here to %s" % but[2]))
-            self.Bind(wx.EVT_BUTTON, but[1], self.button)
-            actionSizer.Add(self.button)
+        buts = ActionButtons(mainPanel)
           
         self.Bind(wx.EVT_CLOSE, self.onClose)
 
@@ -663,19 +810,10 @@ class MyFrame(wx.Frame):
         gridSizer.Add(gridPanel, 1, wx.ALL|wx.EXPAND, 10)
         gridSizer.Add(closeBtn, 0, wx.ALL|wx.RIGHT, 10)
         mainSizer.Add(gridSizer, 1, wx.EXPAND)
-        
-        mainSizer.Add(actionSizer, 0, wx.ALL, 10)  
+        mainSizer.Add(buts.actionSizer, 0, wx.ALL, 10)  
         mainPanel.SetSizer(mainSizer)
           
-    #----------------------------------------------------------------------
-    def OnClickPlus(self, event):
-        pass
-    
-    def OnClickMinus(self, event):
-        pass
-    
-    def OnClickDelete(self, event):
-        pass      
+       
     #----------------------------------------------------------------------
     def onClose(self, event):
         """
@@ -702,8 +840,10 @@ class MyGrid(wx.grid.Grid):
         wx.grid.Grid.__init__(self, parent, -1)
         self.popupMenuData = popupMenuData
         self.SetRowLabelSize(0)
-        self.table = MyTable(tableName)
-        for idx, col in enumerate(gridData()[tableName][0]):
+        self.tableName = tableName
+        self.table = MyTable(self.tableName)
+        
+        for idx, col in enumerate(gridData()[self.tableName][0]):
             self.table.SetColLabelValue(idx, col)
         self.SetTable(self.table, True)
         
@@ -757,14 +897,35 @@ class MyGrid(wx.grid.Grid):
         itemText = self.popupMenu.FindItemById(event.GetId()).GetText()
         action = itemText.split()
         if action[0] == 'Add':
-            addDialog = MyDialog(action[1])
-            if addDialog.ShowModal() == wx.ID_OK:
-                print('Add action')
+            addDialog = ActionDialog(action[1])
+            result = addDialog.ShowModal()
+            if result == wx.ID_OK:
+                if self.tableName == 'currency':
+                    
+                    for widget in addDialog.widgetList:
+                        name = widget.GetName()
+                        if name == 'fullname':
+                            fullName = widget.GetValue()
+                        if name == 'shortname':    
+                            shortName = widget.GetValue()
+                        if name == 'code':    
+                            code = widget.GetValue()
+                    
+                    maxId = DBData.getMaxID(self.tableName)
+                    
+
+                    DBData.insertRow(self.tableName, (maxId+1, fullName, shortName, code))
+                    DBData.commit()
+            
             addDialog.Destroy()     
         elif action[0] == 'Edit':
             pass
         elif action[0] == 'Delete':
             pass
+        
+        self.table.selection = self.table.data.selectRows(self.tableName)
+#         self.table.nrows = len(self.table.selection)
+        self.Reset()
         
     def OnCellLeftClick(self, event):
         self.ClearSelection()
@@ -809,17 +970,18 @@ class Data():
         self.selectRows(tableName)
         return self.nrows
     
-#     def selectRows(self, tableName, cond='All', **args): 
-    def selectRows(self, tableName, args=''): 
+#     def selectRows(self, tableName, cond='all', **args): 
+    def selectRows(self, tableName, flag='all', args=''): 
         '''
         Selects rows from table, cond detects what part of selection we need
         '''
         dataTable = gridData()[tableName]
-        query = dataTable[1]['All']
-        #print(self.dataTable[1]['All'])
+        query = dataTable[1][flag]
+        #print(self.dataTable[1]['all'])
         query = query + args
+        print(query)
 #             for key in args:
-#                 if cond == 'id':
+#                 if cond == 'filter':
 #                     if args[key] is not None:
 #                         query = query + ' ' + key + '=' + str(args[key])
 #                     else:
@@ -828,6 +990,9 @@ class Data():
         rows = self.cursor.fetchall()
         self.nrows = len(rows) 
         return rows
+    
+    def getMaxID(self, tableName):
+        return self.selectRows(tableName, 'id')[0][0]
     
     def insertRow(self, tableName, cols):
         dataTable = gridData()[tableName]
@@ -850,14 +1015,14 @@ class MyTable(wx.grid.GridTableBase):
         self.tableName = tableName
         self.data = DBData
         self.selection = self.data.selectRows(self.tableName) 
-        self.nrows = len(self.selection)
+        self.nrows = self.data.GetRowNumber(self.tableName)
         self.ncols = self.data.GetColNumber(self.tableName)        
     
     def GetNumberRows(self):
-        return self.nrows
+        return self.data.GetRowNumber(self.tableName)
     
     def GetNumberCols(self):
-        return self.ncols
+        return self.data.GetColNumber(self.tableName)
     
     def IsEmptyCell(self, row, col):
         if self.GetNumberRows() > 0:
@@ -902,6 +1067,7 @@ class MyTable(wx.grid.GridTableBase):
         (Grid) -> Reset the grid view.   Call this to
         update the grid if rows and columns have been added or deleted
         """
+        print('ResetView called', self.nrows)
         grid.BeginBatch()
  
         for current, new, delmsg, addmsg in [
@@ -924,15 +1090,43 @@ class MyTable(wx.grid.GridTableBase):
         grid.AdjustScrollbars()
         grid.ForceRefresh()
 
-class MyDialog(wx.Dialog):
-    def __init__(self, kind):
+class ActionDialog(wx.Dialog):
+    def __init__(self, tableName):
         wx.Dialog.__init__(self, None, -1, "Test", style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, size=(400,500))
+        self.widgetList = []
 #         self.data = DBData()
+#         StatTxtStyle = wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM
+#         if tableName == 'currency':
+#             sizerV = wx.BoxSizer(wx.VERTICAL)
+#             self.fullName = wx.StaticText(self, -1, 'Full Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Short name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),
+#                         ((wx.StaticText, 'Code', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+#                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL)
+#                             ),    
+#                         ((wx.Button, 'Ok', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
+#                          (wx.Button, 'Cancel', 0, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
+#             self.SetSizer(sizerV)
+#             sizerV.Fit(self)
+#         elif tableName == 'account':
+#             pass
+#         elif tableName == 'organization':
+#             pass
+#         elif tableName == 'item':
+#             pass
+#         elif tableName == 'payment':
+#             pass
+#         elif tableName == 'income':
+#             pass
+        
         
         def createCtrl(el):
             if el[0] == wx.ComboBox:
                 ctrl = el[0](self, -1, el[1], choices=el[6], style=el[2], name=el[5]) # creates an instance of one of controls
-            elif el[0] == wx.Button: 
+            elif el[0] == wx.Button or el[0] == wx.TextCtrl: 
                 ctrl = el[0](self, -1, el[1], style=el[2], name=el[5])
             else:
                 ctrl = el[0](self, -1, el[1], style=el[2])
@@ -940,18 +1134,19 @@ class MyDialog(wx.Dialog):
                     
         sizerV = wx.BoxSizer(wx.VERTICAL)
         
-        ctrlElements = dialogData()[kind]
+        ctrlElements = dialogData()[tableName]
         for element in ctrlElements:
             if type(element[0]) == tuple: 
                 sizerH = wx.BoxSizer(wx.HORIZONTAL)
                 for el in element:
                     ctrl = createCtrl(el)
+                    self.widgetList.append(ctrl)
                     if el[0] == wx.ComboBox:
                         objName = ctrl.GetName()
                         if objName == 'account':
                             self.cbAccount = ctrl
                         if objName == 'organization':
-                            self. cbOrganization = ctrl
+                            self.cbOrganization = ctrl
                         if objName == 'category':
                             self.cbCategory = ctrl
                             print('self.cbCategory:', self.cbCategory)
@@ -965,8 +1160,8 @@ class MyDialog(wx.Dialog):
                 sizerV.Add(sizerH, 0, wx.EXPAND)
             else:
                 ctrl = createCtrl(element) # creates an instance of one of controls 
+                self.widgetList.append(ctrl)
                 sizerV.Add(ctrl, element[3], element[4], 10)
-        
         self.SetSizer(sizerV)
         sizerV.Fit(self)
         
@@ -976,7 +1171,6 @@ class MyDialog(wx.Dialog):
         if but == 'ok':
             code = wx.ID_OK
 
-        print('EndModal')
         self.EndModal(code)
         
     def OnCBSelect(self, event, tableName):
