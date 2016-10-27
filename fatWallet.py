@@ -7,13 +7,16 @@ from wx.lib.pubsub import pub
 import os
 import datetime
 from wx.lib.masked import NumCtrl 
-import wx.lib.agw.piectrl as PC
+# import wx.lib.agw.piectrl as PC
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
+
 import wx.lib.agw.hyperlink as hyperText
 
 imgFolder = os.getcwd() + '\\img\\'
 
-gridLabelColor = wx.Colour(154,207,227) #'#4f3856'
-gridCellColor = wx.Colour(228,232,233)
+blueColor = '#9acfe3'
+lightGreyColor = '#e4e8e9'
 
 def pydate2wxdate(date):
     assert isinstance(date, (datetime.datetime, datetime.date))
@@ -24,7 +27,6 @@ def pydate2wxdate(date):
 def wxdate2pydate(date):
     assert isinstance(date, wx.DateTime)
     if date.IsValid():
-        print(date.FormatISODate().split('-'))
         ymd = map(int, date.FormatISODate().split('-'))
         return datetime.date(*ymd)
     else:
@@ -157,7 +159,7 @@ def dialogData():
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'orgdict')
                             ),
                         ((wx.StaticText, 'Category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'categoryitem', wx.DefaultValidator, makeChoice('category')),
+                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'category', wx.DefaultValidator, makeChoice('category')),
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'catdict')
                             ),
                         ((wx.StaticText, 'Item', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -236,7 +238,7 @@ def dialogData():
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'orgdict')
                             ),
                         ((wx.StaticText, 'Category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'categoryitem', NotEmptyValidator(), makeChoice('category')),
+                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'category', NotEmptyValidator(), makeChoice('category')),
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'catdict')
                             ),
                         ((wx.StaticText, 'Item', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -265,7 +267,7 @@ def dialogData():
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'orgdict')
                             ),
                         ((wx.StaticText, 'Category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'categoryitem', wx.DefaultValidator, makeChoice('category')),
+                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALIGN_CENTER_VERTICAL|wx.ALL, 'category', wx.DefaultValidator, makeChoice('category')),
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'catdict')
                             ),
                         ((wx.StaticText, 'Item', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
@@ -276,7 +278,8 @@ def dialogData():
                         )
             } 
 
-pieColorData = ('#f7ff10', '#cf0013', '#0fc80b') 
+pieColorData = ('#76ce38', '#d9ec38', '#ddcb32', '#f3af2f', '#ee7b28', '#eb3a22', '#cf4385', '#bb6bce', 
+                '#935bcd', '#8b7aeb', '#899ee8', '#3982d3', '#a6d9fd', '#75b6d2', '#93dadc', '#65d1ae', '#61c478', '#4da338') 
 
 class MainFrame(wx.Frame):
     def __init__(self, parent):
@@ -323,22 +326,22 @@ class MainFrame(wx.Frame):
                 ]
     
     def OnAccountList(self, event):
-        accountDialog = AccountDialog(actFlag=False)
+        accountDialog = AccountDialog()
         accountDialog.ShowModal()
         accountDialog.Destroy()
     
     def OnCurrencyList(self, event):
-        curDialog = CurrencyDialog(actFlag=False)
+        curDialog = CurrencyDialog()
         curDialog.ShowModal()
         curDialog.Destroy()
         
     def OnCategoryList(self, event):
-        catDialog = CategoryDialog(actFlag=False)
+        catDialog = CategoryDialog()
         catDialog.ShowModal()
         catDialog.Destroy()
         
     def OnOrganizationList(self, event):
-        orgDialog = OrgDialog(actFlag=False)
+        orgDialog = OrgDialog()
         orgDialog.ShowModal()
         orgDialog.Destroy()
         
@@ -467,25 +470,40 @@ class MainFrame(wx.Frame):
         self.popuped = False
         self.content = Content(self, {}, 'payfilter')
         pub.subscribe(self.content.myListener, "mainListener")
+        
+        dateFrom = datetime.date(datetime.date.today().year, datetime.date.today().month, 1)
+        dateTo = datetime.date(datetime.date.today().year, datetime.date.today().month + 1, 1)
+        args = {'datefrom': str(dateFrom), 'dateto': str(dateTo)}
+        rows = DBData.selectRows('payment', 'piechart', args)
+        
+        rowCount = len(rows)
+        labels = [row[0] for row in rows]
+        data = [row[1] for row in rows]
+        self.figure = plt.figure(figsize=(4,6), facecolor=lightGreyColor)
+        
+        explode = (0.1, 0, 0, 0, 0)  # explode 1st slice
+        
+        
+        #patches, texts = 
+        plt.pie(data, explode=None, labels=labels, 
+                                 colors=pieColorData[:rowCount], autopct='%1.1f%%', 
+                                 shadow=True)
+      #  plt.title('Simple pie chart')
+#         plt.legend(patches, labels, loc="best")
+        plt.axis('equal')
+        # 3. Создание панели для рисования с помощью Matplotlib
+        self.pieCanvas = FigureCanvasWxAgg(self, -1, self.figure)
+        self.pieCanvas.SetBackgroundColour('white')
+       # self.canvas.SetMinSize ((100, 100))
+        
                 
-        self.myPie = PC.PieCtrl(self, -1, pos=(0,100), size=wx.Size(300,540))
-        self.myPie.SetAngle(0.3)
-#         mypie.SetBackColour('red')
-        self.myPie.SetShowEdges(False)
-        self.myPie.SetHeight(30)
-        self.myPieLeg = self.myPie.GetLegend()
-#         self.myPieLeg.SetBackColour('green')
-#         self.myPieLeg.SetLabelColour('purple')
-        self.myPieLeg.SetTransparent(True)
-#         self.myPieLeg.SetPosition((0,500))
-#         self.myPieLeg.SetLabelFont(wx.Font(wx.FontInfo(10).Bold() ))
-         
-         
-         
-        part = PC.PiePart(300, wx.Colour('#cf0013'), "Label 2")
-        self.myPie._series.append(part)
-#          
-#         part = PC.PiePart(300, wx.Colour('#0fc80b'), "Label 3")
+#         self.myPie = PC.PieCtrl(self, -1, pos=(0,100), size=wx.Size(300,540))
+#         self.myPie.SetAngle(0.3)
+#         self.myPie.SetShowEdges(False)
+#         self.myPie.SetHeight(30)
+#         self.myPieLeg = self.myPie.GetLegend()
+#         self.myPieLeg.SetTransparent(True)
+#         part = PC.PiePart(300, wx.Colour('#cf0013'), "Label 2")
 #         self.myPie._series.append(part)
 
         quickPanel = wx.Panel(self, -1, size=(100,100))
@@ -524,11 +542,13 @@ class MainFrame(wx.Frame):
         hyperSizer.Add(totalPanel, 1, wx.BOTTOM|wx.LEFT|wx.EXPAND, 5)
         mainSizer = wx.BoxSizer(wx.HORIZONTAL)
         mainSizer.Add(hyperSizer, 1, wx.EXPAND)
-        mainSizer.Add(self.myPie, 2, wx.EXPAND|wx.ALL, 5)
+        mainSizer.Add(self.pieCanvas, 2, wx.EXPAND|wx.ALL, 5)
         mainSizer.Add(self.content.sizerV, 2, wx.EXPAND|wx.TOP|wx.RIGHT|wx.BOTTOM, 5)
         self.SetSizer(mainSizer)
         
-
+    def fillPieChart(self, args):
+        rows = DBData.selectRows('payment', 'piechart', args)
+        
     def OnSubmitClick(self, event):
         self.dateTo = wx.FindWindowByName('dateto', self)
         self.dateFrom = wx.FindWindowByName('datefrom', self)
@@ -561,14 +581,14 @@ class MainFrame(wx.Frame):
                     
             rows = DBData.selectRows('payment', 'piechart', args)
             
-            i = 0
-            self.myPie._series[:] = []
-            for row in rows:
-                part = PC.PiePart(row[1], wx.Colour(pieColorData[i]), '%s (%s)' % (row[0], row[1]))
-                self.myPie._series.append(part)
-                i = i + 1
-
-            self.myPie.Refresh()
+#             i = 0
+#             self.myPie._series[:] = []
+#             for row in rows:
+#                 part = PC.PiePart(row[1], wx.Colour(pieColorData[i]), '%s (%s)' % (row[0], row[1]))
+#                 self.myPie._series.append(part)
+#                 i = i + 1
+# 
+#             self.myPie.Refresh()
                 
     
     def OnChangeDate(self, event):
@@ -599,28 +619,28 @@ def gridPopupMenuData(tableName):
 
 class CategoryDialog(wx.Dialog):
     #----------------------------------------------------------------------
-    def __init__(self, actFlag):
+    def __init__(self, listenerName=None, actFlag=False):
         wx.Dialog.__init__(self, None, wx.ID_ANY, "Categories and items", style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, size=(700,500))
         self.panel = wx.Panel(self)
         catLabel = wx.StaticText(self.panel, -1, 'Categories')
         self.tableName = 'category'
         self.selection = DBData.selectRows(self.tableName) 
-        
+        self.listenerName = listenerName
         self.createTree()
         self.treePopupMenu = self.createPopupMenu(treePopupMenuData)
         
         itemLabel = wx.StaticText(self.panel, -1, 'Items')
 #         gridPanel = wx.Panel(self.panel, style=wx.SUNKEN_BORDER)
         self.itemGrid = MyGrid(self.panel, 'item', gridPopupMenuData('item'))
-        self.itemGrid.SetLabelBackgroundColour(gridLabelColor)
-        self.itemGrid.SetDefaultCellBackgroundColour(gridCellColor)
+        self.itemGrid.SetLabelBackgroundColour(blueColor)
+        self.itemGrid.SetDefaultCellBackgroundColour(lightGreyColor)
         self.itemGrid.SetCellHighlightPenWidth(0) 
 #         self.itemGrid.Fit()
         
         closeBtn = wx.Button(self.panel, label="Close")
-        closeBtn.Bind(wx.EVT_BUTTON, self.onSendAndClose)
+        closeBtn.Bind(wx.EVT_BUTTON, self.onClose)
         selectBtn = wx.Button(self.panel, label="Select")
-#         selectBtn.Enable(actFlag)
+        selectBtn.Enable(actFlag)
         selectBtn.Bind(wx.EVT_BUTTON, self.onSelect)
 
         buts = ActionButtons(self.panel, self.tableName, self.itemGrid)
@@ -733,13 +753,11 @@ class CategoryDialog(wx.Dialog):
                 self.itemGrid.curRow = None
                 self.itemGrid.selectionFlag = 'recursive'
                 self.itemGrid.selectionArgs = (str(catItemId),)
-                print('self.itemGrid.selectionArgs',self.itemGrid.selectionArgs)
         self.itemGrid.Reset()
 #         self.itemGrid.Refresh()
             
     def OnEndLabelEdit(self, event):
         treeItem = event.GetItem()
-        print('treeItem', treeItem)
         label = ''
         if len(event.GetLabel().strip()) != 0: 
             label = event.GetLabel().strip() 
@@ -801,7 +819,7 @@ class CategoryDialog(wx.Dialog):
             self.tree.SortChildren(item)
  
     #----------------------------------------------------------------------
-    def onSendAndClose(self, event):
+    def onClose(self, event):
         self.Close()
         
     def onSelect(self, event):
@@ -818,7 +836,7 @@ class CategoryDialog(wx.Dialog):
         else: 
             if self.tree.GetSelection() != 'root':
                 catId = self.tree.GetItemData(self.tree.GetSelection())
-        pub.sendMessage(self.tableName+"Listener", message='category', arg=catId, arg2=itemId)
+        pub.sendMessage(self.listenerName, message='category', arg=catId, arg2=itemId)
         #pub.sendMessage("mainListener", message="test2", arg2="2nd argument!")
         self.Close()
 
@@ -851,7 +869,7 @@ class ActionButtons:
     
 class MyDialog(wx.Dialog):
     #----------------------------------------------------------------------
-    def __init__(self, table, listenerName, actFlag):
+    def __init__(self, table, listenerName=None, actFlag=False):
         '''
         Standart dialog for the dictionaries. 
         actFlag = True means the dialog is called from an action dialog. That case the user can choose item, press "Select" button
@@ -869,8 +887,8 @@ class MyDialog(wx.Dialog):
 #         curPanel.SetBackgroundColour('red')
         self.curGrid = MyGrid(mainPanel, self.tableName, gridPopupMenuData(self.tableName))
         
-        self.curGrid.SetLabelBackgroundColour(gridLabelColor)
-        self.curGrid.SetDefaultCellBackgroundColour(gridCellColor)
+        self.curGrid.SetLabelBackgroundColour(blueColor)
+        self.curGrid.SetDefaultCellBackgroundColour(lightGreyColor)
         self.curGrid.SetCellHighlightPenWidth(0) 
 #         self.curGrid.Fit()
         
@@ -914,17 +932,17 @@ class MyDialog(wx.Dialog):
 
 class AccountDialog(MyDialog):
     #----------------------------------------------------------------------
-    def __init__(self, listenerName, actFlag):
+    def __init__(self, listenerName=None, actFlag=False):
         MyDialog.__init__(self, "Account", listenerName, actFlag)
         
 class CurrencyDialog(MyDialog):
     #----------------------------------------------------------------------
-    def __init__(self, listenerName, actFlag):
+    def __init__(self, listenerName=None, actFlag=False):
         MyDialog.__init__(self, "Currency", listenerName, actFlag)
         
 class OrgDialog(MyDialog):
     #----------------------------------------------------------------------
-    def __init__(self, actFlag, listenerName):
+    def __init__(self, listenerName=None, actFlag=False):
         MyDialog.__init__(self, "Organization", listenerName, actFlag)
                
     #----------------------------------------------------------------------
@@ -939,8 +957,8 @@ class MyFrame(wx.Frame):
         
        # gridPanel = wx.Panel(mainPanel, style=wx.SUNKEN_BORDER)
         self.grid = MyGrid(mainPanel, self.tableName, gridPopupMenuData(self.tableName))
-        self.grid.SetLabelBackgroundColour(gridLabelColor)
-        self.grid.SetDefaultCellBackgroundColour(gridCellColor)
+        self.grid.SetLabelBackgroundColour(blueColor)
+        self.grid.SetDefaultCellBackgroundColour(lightGreyColor)
         self.grid.SetCellHighlightPenWidth(0)  
 #         self.grid.Fit()
         
@@ -1163,19 +1181,17 @@ class MyGrid(wx.grid.Grid):
             elif self.tableName == 'payment':
                 rows = DBData.selectRows(self.tableName, 'filter', ' where PaymentId=%s' % dataId)
                 row = rows[0]
-                args = {'datectrl': row[1], 'account': row[2], 'organization': row[3], 'categoryitem': row[4], 'item': row[5], 'price': str(row[6]), 'count': str(row[7]), 'total': str(row[8])}
+                args = {'datectrl': row[1], 'account': row[2], 'organization': row[3], 'category': row[4], 'item': row[5], 'price': str(row[6]), 'count': str(row[7]), 'total': str(row[8])}
             elif self.tableName == 'income':
                 rows = DBData.selectRows(self.tableName, 'filter', ' where IncomeId=%s' % dataId)
                 row = rows[0]
-                args = {'datectrl': row[1], 'account': row[2], 'organization': row[3], 'categoryitem': row[4], 'item': row[5], 'amount': str(row[6])}
+                args = {'datectrl': row[1], 'account': row[2], 'organization': row[3], 'category': row[4], 'item': row[5], 'amount': str(row[6])}
                     
             editDialog = ActionDialog(self.tableName, args)
-            print('editDialog', editDialog.GetId(), editDialog.GetTitle())
             result = editDialog.ShowModal()
             if result == wx.ID_OK:
                 cols = getValues(editDialog) + (dataId,) 
                 self.table.UpdateRow(cols)
-            print(editDialog.GetId(), 'is destroyed')
             editDialog.Destroy()  
 
         if key == 1:
@@ -1246,9 +1262,8 @@ class Data():
         dataTable = gridData()[tableName]
         query = dataTable[1][flag]
         #print(self.dataTable[1]['all'])
-        if flag == 'filter':
-            query = query + args
-            self.cursor.execute(query)
+        if flag == 'recursive': 
+            self.cursor.execute(query, args)
         elif flag == 'piechart':
             newargs = [args.get('datefrom'), args.get('dateto')]
             if args.get('account', None):
@@ -1260,10 +1275,9 @@ class Data():
             query = query + dataTable[1]['piechartpart2']
             self.cursor.execute(query, newargs)
         else:
+            query = query + args
+            self.cursor.execute(query)
             
-            self.cursor.execute(query, args)
-            
-        
         rows = self.cursor.fetchall()
         self.nrows = len(rows) 
         return rows
@@ -1403,7 +1417,9 @@ class Content():
         self.args = args
         self.parent = parent
         self.value = ''
-        
+#         print('GetId()',self.parent.GetId())
+        self.listenerName = self.tableName + 'Listener' + str(self.parent.GetId())
+        pub.subscribe(self.myListener, self.listenerName)
         
         def createCtrl(el):
             if el[0] == wx.Button:
@@ -1468,12 +1484,10 @@ class Content():
 #                             if args is not None: ctrl.SetValue(args.get(el[5])) 
                             self.parent.cbCurrency = ctrl
                         elif objName == 'account':
-                            
                             self.parent.cbAccount = ctrl
-                            print('account:', self.parent.GetId(), self.parent.GetTitle(), self.parent.cbAccount.GetItems())
                         elif objName == 'organization':
                             self.parent.cbOrganization = ctrl
-                        elif objName == 'categoryitem':
+                        elif objName == 'category':
                             self.parent.cbCategory = ctrl
                         elif objName == 'item':
                             self.parent.cbItem = ctrl
@@ -1492,8 +1506,8 @@ class Content():
                 ctrl = createCtrl(element) # creates an instance of one of controls 
                 self.parent.widgetList.append(ctrl)
                 self.sizerV.Add(ctrl, element[3], element[4], 10)
-        
-    def restoreSelectionById(self, cb, dataId):
+
+    def getSelectionById(self, cb, dataId):
         for i in range(cb.GetCount()):
             if cb.GetClientData(i) == dataId:
                 return i 
@@ -1510,9 +1524,9 @@ class Content():
             cb.Append(item[1])
             cb.SetClientData(i, item[0])
             i = i + 1
-        n = self.restoreSelectionById(cb, dataId)
+        n = self.getSelectionById(cb, dataId)
         if n != -1:
-            cb.SetSelection(self.restoreSelectionById(cb, dataId))
+            cb.SetSelection(self.getSelectionById(cb, dataId))
             
     def OnChangeNum(self, event):
         numField = event.GetEventObject()
@@ -1531,7 +1545,9 @@ class Content():
     def OnCBSelect(self, event):
         if event and event.GetEventObject().GetName() == 'category':
             elId = self.parent.cbCategory.GetClientData(self.parent.cbCategory.GetSelection())
+            print('catId',elId)
             selection = DBData.selectRows('item', "filter", " where CategoryID = %s" % elId)
+            print(selection)
             self.cbFilling(self.parent.cbItem, selection)
 #         self.cbItem.SetSelection(self.cbItem.FindString(itemValue))
 #         event.Skip()   
@@ -1565,45 +1581,38 @@ class Content():
             
     def OnClickButton(self, event):
         but = event.GetEventObject().GetName()
-        listenerName = self.tableName+'Listener'
         if but == 'curdict':
-            curDialog = CurrencyDialog(listenerName, actFlag=True)
+            curDialog = CurrencyDialog(self.listenerName, actFlag=True)
             curDialog.ShowModal()
             curDialog.Destroy()
-            selection = DBData.selectRows('currency', "all")
-            self.cbFilling(self.parent.cbCurrency, selection)
         elif but == 'accdict':
-            accDialog = AccountDialog(listenerName, actFlag=True)
+            accDialog = AccountDialog(self.listenerName, actFlag=True)
             accDialog.ShowModal()
-            print('accDialog destroyed', accDialog.GetId())
             accDialog.Destroy()
-            selection = DBData.selectRows('account', "all")
-            self.cbFilling(self.parent.cbAccount, selection)
         elif but == 'catdict':
-            catDialog = CategoryDialog(actFlag=True)
+            catDialog = CategoryDialog(self.listenerName, actFlag=True)
             catDialog.ShowModal()
-            catDialog.Destroy()
-            selection = DBData.selectRows('category', "all")
-            self.cbFilling(self.parent.cbCategory, selection)
+#             selection = DBData.selectRows('category', "all")
+#             self.cbFilling(self.parent.cbCategory, selection)
             self.OnCBSelect(event)
+            catDialog.Destroy()
         elif but == 'orgdict':
-            orgDialog = OrgDialog(listenerName, actFlag=True)
+            orgDialog = OrgDialog(self.listenerName, actFlag=True)
             orgDialog.ShowModal()
             orgDialog.Destroy()
-            selection = DBData.selectRows('organization', "all")
-            self.cbFilling(self.parent.cbOrganization, selection)
         elif but == 'itemdict':
-            catDialog = CategoryDialog(actFlag=True)
+            catDialog = CategoryDialog(self.listenerName, actFlag=True)
             catDialog.ShowModal()
+            selection = DBData.selectRows('item', "all")
+            self.cbFilling(self.parent.cbItem, selection)
             catDialog.Destroy()
-            selection = DBData.selectRows('category', "all")
-            self.cbFilling(self.parent.cbCategory, selection)
-            self.OnCBSelect(event)
+       #     self.OnCBSelect(event)
             
     def myListener(self, message, arg=None, arg2=None):
         """
         Listener function
         """
+        
         print("Received: ", message, arg, arg2)
         
         if message == 'category':
@@ -1611,52 +1620,64 @@ class Content():
             self.cbFilling(self.parent.cbCategory, selection)
             
             if arg:
-                index = self.restoreSelectionById(self.parent.cbCategory, int(arg))
+                index = self.getSelectionById(self.parent.cbCategory, int(arg))
                 self.parent.cbCategory.SetSelection(index)
                 
             else:
                 self.parent.cbCategory.SetSelection(wx.NOT_FOUND)
-            self.OnCBSelect(None)
+            e = wx._core.CommandEvent(commandEventType=wx.wxEVT_COMBOBOX)
+            e.SetEventObject(self.parent.cbCategory)
+            print('e:', e, e.GetEventObject().GetName())
+            self.OnCBSelect(e)
             if arg2:
-                index = self.restoreSelectionById(self.parent.cbItem, int(arg2))
+                index = self.getSelectionById(self.parent.cbItem, int(arg2))
                 self.parent.cbItem.SetSelection(index)
             else:
                 self.parent.cbItem.SetSelection(wx.NOT_FOUND)
         elif message == 'currency':
+            selection = DBData.selectRows('currency', "all")
+            self.cbFilling(self.parent.cbCurrency, selection)
             if arg:
-                index = self.restoreSelectionById(self.parent.cbCurrency, int(arg))
+                index = self.getSelectionById(self.parent.cbCurrency, int(arg))
                 self.parent.cbCurrency.SetSelection(index)
             else:
                 self.parent.cbCurrency.SetSelection(wx.NOT_FOUND)
         elif message == 'account':
+            selection = DBData.selectRows('account', "all")
+            self.cbFilling(self.parent.cbAccount, selection)
             if arg:
-                print('parent', self.parent.GetTitle())
-                index = self.restoreSelectionById(self.parent.cbAccount, int(arg))
+                index = self.getSelectionById(self.parent.cbAccount, int(arg))
                 self.parent.cbAccount.SetSelection(index)
             else:
                 self.parent.cbAccount.SetSelection(wx.NOT_FOUND)
         elif message == 'organization':
+            selection = DBData.selectRows('organization', "all")
+            self.cbFilling(self.parent.cbOrganization, selection)
             if arg:
-                index = self.restoreSelectionById(self.parent.cbOrganization, int(arg))
+                index = self.getSelectionById(self.parent.cbOrganization, int(arg))
                 self.parent.cbOrganization.SetSelection(index)
             else:
                 self.parent.cbOrganization.SetSelection(wx.NOT_FOUND)
-            
+          
 class ActionDialog(wx.Dialog):
     def __init__(self, tableName, args={}):
         wx.Dialog.__init__(self, None, -1, tableName, style=wx.DEFAULT_DIALOG_STYLE|wx.RESIZE_BORDER, size=(400,500))
         self.widgetList = []
         self.tableName = tableName
+        print(self.GetId())
         self.args = args
-        self.listenerName = self.tableName + "Listener"
         self.content = Content(self, args, tableName)
-        pub.subscribe(self.content.myListener, self.listenerName)
         self.popuped = False 
         self.SetSizer(self.content.sizerV)
         self.content.sizerV.Fit(self)
-
+#         self.content
+#         self.Bind(wx.EVT_CLOSE, self.OnClose)
     
-            
+    def OnClose(self, event):
+        print('Close: isSubscribed - ', pub.isSubscribed(self.content.myListener, self.content.listenerName))
+        self.content.__del__()
+#         event.Skip()    
+        
 class NotEmptyValidator(wx.Validator):
     def __init__(self):
         wx.Validator.__init__(self)
