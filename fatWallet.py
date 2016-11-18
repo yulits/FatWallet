@@ -22,7 +22,7 @@ def pydate2wxdate(date):
     assert isinstance(date, (datetime.datetime, datetime.date))
     tt = date.timetuple()
     dmy = (tt[2], tt[1]-1, tt[0])
-    return wx.DateTimeFromDMY(*dmy)
+    return wx.DateTime.FromDMY(*dmy)
  
 def wxdate2pydate(date):
     assert isinstance(date, wx.DateTime)
@@ -36,9 +36,9 @@ def gridData():
     return {'category': (('CategoryId', 'Name', 'ParentId'),
                            {'all':'select CategoryId, Name, ParentId, TaxRate from category order by 2',
                             'id':'select max(CategoryId) from category',
-                            'filter':'select CategoryId, Name, TaxRate from category '},
+                            'filter':'select CategoryId, Name, ParentId, TaxRate from category '},
                            'insert into category values (?, ?, ?, ?)',
-                           'update category set Name=?, ParentId=?, TaxRate where CategoryId=?',
+                           'update category set Name=?, ParentId=?, TaxRate=? where CategoryId=?',
                            'delete from category where CategoryId=?'),
             'item': (('Name', 'Category'),
                            {'all':'select i.ItemId, i.Name, \
@@ -116,23 +116,32 @@ def gridData():
                            'delete from payment where PaymentId=?'),
             'itempayment': (('Item', 'Price', 'Count', 'SubTotal'), # %H:%M:%S
                            {'all':"select e.ItemPayId, e.PaymentId, \
-                            (select c.Name from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId), \
                             (select i.Name from item i where i.ItemId = e.ItemId),\
                             Price, Count, SubTotal \
                            from itempayment e order by 1", 
                            'id': 'select max(ItemPayId) from itempayment',
-                           'filter': "select e.ItemPayId, \
+                           'filter': "select ItemPayId, \
+                           (select i.Name from item i where i.ItemId = e.ItemId), \
+                           Price, Count, SubTotal, \
+                            (select c.TaxRate from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId) \
+                           from itempayment_tmp e \
+                           union  \
+                           select e.ItemPayId, \
                             (select i.Name from item i where i.ItemId = e.ItemId),\
-                            Price, Count, SubTotal \
+                            Price, Count, SubTotal, \
+                            (select c.TaxRate from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId) \
                            from itempayment e "},
                            'insert into itempayment (ItemPayId, PaymentId, ItemId, Price, Count, SubTotal) values (?, ?, ?, ?, ?, ?)',
                            'update itempayment set ItemId=?, Price=?, Count=?, SubTotal=? where ItemPayId=?',
                            'delete from itempayment where ItemPayId=?'),
             'itempayment_tmp': (('Item', 'Price', 'Count', 'SubTotal'), # %H:%M:%S
-                           {'all':"select e.ItemId, Price, Count, SubTotal \
-                           from itempayment_tmp e"},
-                           'insert into itempayment_tmp (ItemId, Price, Count, SubTotal) values (?, ?, ?, ?)',
-                           'update itempayment_tmp set ItemId=?, Price=?, Count=?, SubTotal=?',
+                           {'all':"select ItemPayId, ItemId, Price, Count, SubTotal,  \
+                           (select c.TaxRate from category c, item i where c.CategoryId = i.CategoryId and i.ItemId = e.ItemId) \
+                           from itempayment_tmp e",
+                           'id': 'select max(ItemPayId) from itempayment_tmp'},
+                           'insert into itempayment_tmp (ItemPayId, ItemId, Price, Count, SubTotal) values (?, ?, ?, ?, ?)',
+                           'update itempayment_tmp set ItemId=?, Price=?, Count=?, SubTotal=? where ItemPayId=?',
+                           'delete from itempayment_tmp where ItemPayId=?',
                            'delete from itempayment_tmp'), 
             'income': (('IncomeDate', 'Account', 'Organization', 'Category', 'Item', 'Amount'), # %H:%M:%S
                            {'all':"select IncomeId, strftime('%d.%m.%Y', IncomeDate), \
@@ -225,7 +234,7 @@ def dialogData():
                             (wx.TextCtrl, '', 0, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'account', NotEmptyValidator())
                             ),
                         ((wx.StaticText, 'Currency', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.ComboBox, 'Select currency...', wx.CB_DROPDOWN, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT|wx.ALL,  'currency', NotEmptyValidator(), makeChoice('currency')),
+                            (wx.ComboBox, '', wx.CB_DROPDOWN, 1, wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT|wx.ALL,  'currency', NotEmptyValidator(), makeChoice('currency')),
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'curdict')
                             ),
                         ((wx.Button, 'Ok', wx.ID_OK, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
@@ -236,7 +245,7 @@ def dialogData():
                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'item', NotEmptyValidator())
                             ),
                         ((wx.StaticText, 'Category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                            (wx.ComboBox, 'Select category...', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'category', NotEmptyValidator(), makeChoice('category')),
+                            (wx.ComboBox, '', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.ALL,  'category', NotEmptyValidator(), makeChoice('category')),
                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'catdict')
                             ),
                         ((wx.Button, 'Ok', wx.ID_OK, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
@@ -246,9 +255,14 @@ def dialogData():
                         ((wx.StaticText, 'Name', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
                             (wx.TextCtrl, '', 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'category', NotEmptyValidator())
                             ),
-                        ((wx.RadioButton, '', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
-                         (wx.StaticText, 'Tax rate', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM),
-                            (NumCtrl, 0, 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'subtotal', NotZeroValidator())
+                        ((wx.StaticText, 'Parent category', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM), 
+                            (wx.ComboBox, '', wx.CB_DROPDOWN, 1, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL,  'parent', wx.DefaultValidator, makeChoice('category'))
+#                             (wx.BitmapButton, 'dict.png', 0, 0, wx.ALIGN_LEFT|wx.TOP|wx.BOTTOM|wx.RIGHT, 'catdict')
+                            ),
+                        ((wx.RadioButton, 'Tax free', wx.RB_GROUP, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM, 'taxfree'), 
+                            ),
+                        ((wx.RadioButton, 'Tax rate', 0, 0, wx.ALIGN_RIGHT|wx.ALIGN_CENTER|wx.TOP|wx.LEFT|wx.BOTTOM, 'tax'), 
+                            (NumCtrl, 8.25, 0, 0, wx.ALIGN_LEFT|wx.EXPAND|wx.ALL, 'taxrate', wx.DefaultValidator)
                             ),
                         ((wx.Button, 'Ok', wx.ID_OK, 0, wx.ALIGN_LEFT|wx.ALL, 'ok'), 
                          (wx.Button, 'Cancel', wx.ID_CANCEL, 0, wx.ALIGN_LEFT|wx.ALL, 'cancel'))
@@ -511,15 +525,15 @@ class MainFrame(wx.Frame):
         self.content = Content(self, args, 'piefilter')
         pub.subscribe(self.content.myListener, "mainListener")
         
+        self.figure = plt.figure(figsize=(4,6), facecolor=lightGreyColor)
+        
         rowCount = len(rows)
         labels = [row[0] for row in rows]
         data = [row[1] for row in rows]
-        self.figure = plt.figure(figsize=(4,6), facecolor=lightGreyColor)
-        
-        explode = (0.1, 0, 0, 0, 0)  # explode 1st slice
-        
+        explode = [0] * rowCount  # explode 1st slice
+        explode[0] = 0.1
         #patches, texts = 
-        plt.pie(data, explode=None, labels=labels, 
+        plt.pie(data, explode=explode, labels=labels, 
                                  colors=pieColorData[:rowCount], autopct='%1.1f%%', 
                                  shadow=True, startangle=10)
       #  plt.title('Simple pie chart')
@@ -529,7 +543,7 @@ class MainFrame(wx.Frame):
         self.pieCanvas = FigureCanvasWxAgg(self, -1, self.figure)
         self.pieCanvas.SetBackgroundColour('white')
        # self.canvas.SetMinSize ((100, 100))
-        
+        self.pieCanvas.draw()
                 
 #         self.myPie = PC.PieCtrl(self, -1, pos=(0,100), size=wx.Size(300,540))
 #         self.myPie.SetAngle(0.3)
@@ -613,16 +627,24 @@ class MainFrame(wx.Frame):
                 organizationId = organization.GetClientData(organization.FindString(organization.GetValue().strip()))
                 args['organization'] = str(organizationId)
                     
+            
+            self.figure.clear()
             rows = DBData.selectRows('payment', 'piechart', args)
             rowCount = len(rows)
-            labels = [row[0] for row in rows]
-            data = [row[1] for row in rows]
-            
-            plt.pie(data, explode=None, labels=labels, colors=pieColorData[:rowCount], autopct='%1.1f%%', shadow=True, startangle=10)
+            if rowCount > 0:
+                labels = [row[0] for row in rows]
+                data = [row[1] for row in rows]
+                explode = [0] * rowCount  # explode 1st slice
+                explode[0] = 0.1
+                color = pieColorData[:rowCount]
+            else:
+                labels = None
+                data = [1]
+                explode = None
+                color = ['white']
+            plt.pie(data, explode=explode, labels=labels, colors=color, autopct='%1.1f%%', shadow=True, startangle=10)
             plt.axis('equal')
-            
-#             self.figure.    
-            self.pieCanvas.Refresh()  
+            self.pieCanvas.draw()
               
     def OnChangeDate(self, event):
         
@@ -660,7 +682,7 @@ class CategoryDialog(wx.Dialog):
         self.selection = DBData.selectRows(self.tableName) 
         self.listenerName = listenerName
         self.createTree()
-        self.treePopupMenu = self.createPopupMenu(treePopupMenuData)
+        self.treePopupMenu = self.createPopupMenu(gridPopupMenuData('category'))
         
         itemLabel = wx.StaticText(self.panel, -1, 'Items')
 #         gridPanel = wx.Panel(self.panel, style=wx.SUNKEN_BORDER)
@@ -713,6 +735,7 @@ class CategoryDialog(wx.Dialog):
         self.tree.Expand(self.root)
         self.tree.Bind(wx.EVT_CONTEXT_MENU, self.OnShowPopup)
         self.tree.Bind(wx.EVT_TREE_END_LABEL_EDIT, self.OnEndLabelEdit)
+        self.tree.Bind(wx.EVT_LEFT_DCLICK, self.OnLeftDClick)
 #         self.tree.Bind(wx.EVT_TREE_BEGIN_LABEL_EDIT, self.OnBeginLabelEdit)
         self.Bind(wx.EVT_TREE_SEL_CHANGED, self.OnSelChanged, self.tree)
             
@@ -723,18 +746,22 @@ class CategoryDialog(wx.Dialog):
             self.tree.SetItemData(newItem, item[0])  # Added ID category to the appropriate item 
             self.addTreeNodes(newItem, item[0])
             
-    
-    
-       # self.Bind(wx.EVT_MO, self.OnColor, tool)
-        
-    #    grid.SetColLabelSize(100)
+    def OnLeftDClick(self, event):
+        self.OpenDialog(2)
         
     def createPopupMenu(self, PopupMenuData):
-        popupmenu = wx.Menu()
-        for text in PopupMenuData(self.tableName):
-            item = popupmenu.Append(-1, text)
-            self.Bind(wx.EVT_MENU, self.OnPopupItemSelected, item)
-        return popupmenu
+        popupMenu = wx.Menu()
+        for key in PopupMenuData:
+            popupMenu.Append(key, PopupMenuData[key])
+            self.Bind(wx.EVT_MENU, self.OnPopupItemSelected, id=key)
+#         self.Bind(wx.EVT_CONTEXT_MENU, self.OnShowPopup)
+#         self.PopupMenu(popupMenu) 
+#         popupMenu.Destroy()  
+        
+#         for text in PopupMenuData(self.tableName):
+#             item = popupmenu.Append(-1, text)
+#             self.Bind(wx.EVT_MENU, self.OnPopupItemSelected, item)
+        return popupMenu
         
     def OnShowPopup(self, event):
         pos = event.GetPosition()
@@ -742,17 +769,22 @@ class CategoryDialog(wx.Dialog):
         self.tree.PopupMenu(self.treePopupMenu, self.pos)
     
     def OnPopupItemSelected(self, event):
-        itemText = self.treePopupMenu.FindItemById(event.GetId()).GetText()
+#         itemText = self.treePopupMenu.FindItemById(event.GetId()).GetText()
+#         selItem, flag = self.tree.HitTest(self.pos)
+#         self.tree.SelectItem(selItem)
+#         if itemText == 'Add category':
+#             newItem = self.tree.AppendItem(selItem, '')
+#             self.tree.SelectItem(newItem)
+#             self.tree.EditLabel(newItem)
+#         elif itemText == 'Rename category':
+#             self.tree.EditLabel(selItem)
+#         elif itemText == 'Remove category':
+#             self.DeleteItem()
+        key = event.GetId()
         selItem, flag = self.tree.HitTest(self.pos)
         self.tree.SelectItem(selItem)
-        if itemText == 'Add category':
-            newItem = self.tree.AppendItem(selItem, '')
-            self.tree.SelectItem(newItem)
-            self.tree.EditLabel(newItem)
-        elif itemText == 'Rename category':
-            self.tree.EditLabel(selItem)
-        elif itemText == 'Remove category':
-            self.DeleteItem()
+#         print(self.tree.GetItemText(event.GetItem()))
+        self.OpenDialog(key)
         
     def OnSelChanged(self, event):
         self.tree.SetItemText(self.root, 'All categories')
@@ -857,7 +889,101 @@ class CategoryDialog(wx.Dialog):
         pub.sendMessage(self.listenerName, message='category', arg=catId, arg2=itemId)
         #pub.sendMessage("mainListener", message="test2", arg2="2nd argument!")
         self.Close()
+        
+    def findItemByData(self, item, data):
+        while True:
+            if self.tree.GetItemData(item) == data:
+                return item
+            (firstChild,cookie) = self.tree.GetFirstChild(item)
+            if firstChild:
+                result = self.findItemByData(firstChild, data)
+                if result:
+                    return result
+            item = self.tree.GetNextSibling(item)
+            if not item: return None
+            
+    def OpenDialog(self, key):
+        def getValues(dialog):
+            for widget in dialog.widgetList:
+                name = widget.GetName()
+                if name == 'category':
+                    catName = widget.GetValue().strip()
+                if name == 'parent':
+                    if widget.GetValue():
+                        parentId = widget.GetClientData(widget.FindString(widget.GetValue()))
+                    else: 
+                        parentId = None
+                if name == 'taxfree':
+                    if widget.GetValue():
+                        taxRate = 0
+                if name == 'tax':    
+                    if widget.GetValue():
+                        taxRate = wx.FindWindowByName('taxrate').GetValue()
+#                         if taxrate == '': taxrate = 0    
+#                 if name == 'taxrate':    
+#                     if wx.FindWindowByName('tax').GetValue():
+#                         taxrate = widget.GetValue()
+#                     else: taxrate = 0
+            cols = (catName, parentId, taxRate)
+            return cols
+        
+        def addData():
+            args={}
+            addDialog = ActionDialog(self, self.tableName, args)
+            result = addDialog.ShowModal()
+            if result == wx.ID_OK:
+                maxId = DBData.getMaxID(self.tableName)
+                cols = (maxId+1,) + getValues(addDialog)
+                DBData.insertRow(self.tableName, cols)
+                DBData.commit()
+                parentId = cols[2]
+                rootItem = self.tree.GetRootItem()
+                if parentId:
+                    item = self.findItemByData(rootItem, parentId)
+                    newItem = self.tree.AppendItem(item, cols[1])
+                else:
+                    newItem = self.tree.AppendItem(rootItem, cols[1])
+                self.tree.SetItemData(newItem, cols[0]) 
+                self.tree.SelectItem(newItem)
+            addDialog.Destroy()            
+        
+        def editData():
+            args = {}
+            item = self.tree.GetSelection()
+            if item:
+                categoryId = self.tree.GetItemData(item)
+                rows = DBData.selectRows(self.tableName, 'filter', ' where CategoryId=%s' % categoryId)
+                row = rows[0]
+                args = {'category': row[1], 'parent': row[2], 'taxrate': row[3]}
+                editDialog = ActionDialog(self, self.tableName, args)
+                result = editDialog.ShowModal()
+                if result == wx.ID_OK:
+                    cols = getValues(editDialog) + (categoryId,) 
+                    DBData.updateRow(self.tableName, cols)
+                    DBData.commit()
+                    parentId = cols[1]
+                    self.tree.Delete(item)
+                    rootItem = self.tree.GetRootItem()
+                    if parentId:
+                        item = self.findItemByData(rootItem, parentId)
+                        newItem = self.tree.AppendItem(item, cols[0])
+                    else:
+                        newItem = self.tree.AppendItem(rootItem, cols[0])
+                    self.tree.SetItemData(newItem, categoryId)
+                    self.tree.SelectItem(newItem)
+                editDialog.Destroy()  
 
+        if key == 1:
+            addData()
+        elif key == 2:
+            editData()
+        elif key == 3:
+            item = self.tree.GetSelection()
+            if item:
+                DBData.deleteRow(self.tableName, self.tree.GetItemData(item))
+                DBData.commit()
+                self.tree.Delete(item)
+            
 class ActionButtons:
     def __init__(self, parent, tableName, grid):
         self.tableName = tableName
@@ -890,6 +1016,7 @@ class ActionButtons:
         if self.grid.GetNumberRows() > 0:
             self.grid.OpenDialog(3)
     
+        
 class MyDialog(wx.Dialog):
     #----------------------------------------------------------------------
     def __init__(self, table, listenerName=None, actFlag=False):
@@ -1013,7 +1140,7 @@ class IncomeFrame(MyFrame):
         MyFrame.__init__(self, parent, table, gridPopupMenuData)
     
 def GetMainWindow(obj):
-    while type(obj) != PaymentFrame and type(obj) != ActionDialog and type(obj) != OrgDialog  \
+    while type(obj) != PaymentFrame and type(obj) != IncomeFrame and type(obj) != ActionDialog and type(obj) != OrgDialog  \
         and type(obj) != CurrencyDialog  and type(obj) != AccountDialog  and type(obj) != CategoryDialog:
         obj = obj.GetParent()
     return obj
@@ -1226,14 +1353,13 @@ class MyGrid(wx.grid.Grid):
             if result == wx.ID_OK:
                 maxId = DBData.getMaxID(self.tableName)
                 if self.tableName == 'itempayment':
-                    print('self.parent.paymentId', self.parent.paymentId)
-                    if self.parent.paymentId is None:
-                        DBData.insertRow('itempayment_tmp', getValues(addDialog)) 
-                        DBData.commit()
-                        rows = DBData.selectRows('itempayment_tmp') 
-                        print(rows)
-                    else:
-                        self.table.AppendRow((maxId+1, self.parent.paymentId) + getValues(addDialog))
+                    maxId = DBData.getMaxID('itempayment_tmp')
+#                     if self.parent.paymentId is None:
+                    DBData.insertRow('itempayment_tmp', (maxId+1,) + getValues(addDialog)) 
+                    DBData.commit()
+#                         rows = DBData.selectRows('itempayment_tmp') 
+#                     else:
+#                         self.table.AppendRow((maxId+1, self.parent.paymentId) + getValues(addDialog))
 #                     self.AppendRows()
                 else:    
                     cols = (maxId+1,) + getValues(addDialog)
@@ -1242,13 +1368,12 @@ class MyGrid(wx.grid.Grid):
                         self.parent.paymentId = maxId + 1
                         maxItemId = DBData.getMaxID('itempayment')
                         rows = DBData.selectRows('itempayment_tmp') 
-                        print(rows)
                         for row in rows:
-                            print('row',row)
-                            DBData.insertRow('itempayment', (maxItemId+1, self.parent.paymentId, row[0], row[1], row[2], row[3]))
+                            DBData.insertRow('itempayment', (maxItemId+1, self.parent.paymentId, row[1], row[2], row[3], row[4]))
                             maxItemId = DBData.getMaxID('itempayment') 
-                        DBData.deleteRow('itempayment_tmp')
-                        DBData.commit()
+            if self.tableName == 'payment':
+                DBData.deleteRow('itempayment_tmp')
+                DBData.commit()
             addDialog.Destroy()            
         
         def editData():
@@ -1294,28 +1419,45 @@ class MyGrid(wx.grid.Grid):
             if result == wx.ID_OK:
                 cols = getValues(editDialog) + (dataId,) 
                 self.table.UpdateRow(cols)
-                
+                if self.tableName == 'payment': 
+                        maxItemId = DBData.getMaxID('itempayment')
+                        rows = DBData.selectRows('itempayment_tmp') 
+                        for row in rows:
+                            DBData.insertRow('itempayment', (maxItemId+1, dataId, row[1], row[2], row[3], row[4]))
+                            maxItemId = DBData.getMaxID('itempayment') 
+            if self.tableName == 'payment':
+                DBData.deleteRow('itempayment_tmp')
+                DBData.commit()
             editDialog.Destroy()  
-
+            
+        
         if key == 1:
             addData()
         elif key == 2:
             editData()
         elif key == 3:
+            if self.tableName == 'itempayment':
+                DBData.deleteRow('itempayment_tmp', self.table.GetRowLabelValue(self.curRow))
             self.table.DeleteRow(self.table.GetRowLabelValue(self.curRow))
             self.SelectRow(self.curRow)
             
         if self.tableName == 'itempayment':
-            data = []
+            subTotal = []
+            salesTax = []
             if self.parent.paymentId:
                 rows = DBData.selectRows(self.tableName, 'filter', ' where PaymentId = %s' % self.parent.paymentId)
-                data = [row[4] for row in rows]
-            rows = DBData.selectRows('itempayment_tmp')
-            data = data + [row[3] for row in rows]
+                subTotal = [row[4] for row in rows]
+                salesTax = [row[4]*row[5]/100 for row in rows]
+            else:
+                rows = DBData.selectRows('itempayment_tmp')
+                subTotal = subTotal + [row[4] for row in rows]
+                salesTax = salesTax + [row[4]*row[5]/100 for row in rows]
             if wx.FindWindowByName('subtotal', self.parent): 
-                wx.FindWindowByName('subtotal', self.parent).SetValue(sum(data))
+                wx.FindWindowByName('subtotal', self.parent).SetValue(sum(subTotal))
+            if wx.FindWindowByName('salestax', self.parent): 
+                wx.FindWindowByName('salestax', self.parent).SetValue(sum(salesTax))
             if wx.FindWindowByName('total', self.parent): 
-                wx.FindWindowByName('total', self.parent).SetValue(sum(data) - wx.FindWindowByName('discount', self.parent).GetValue() + wx.FindWindowByName('salestax', self.parent).GetValue())
+                wx.FindWindowByName('total', self.parent).SetValue(sum(subTotal) - wx.FindWindowByName('discount', self.parent).GetValue() + wx.FindWindowByName('salestax', self.parent).GetValue())
             
                     
         self.table.data = DBData.selectRows(self.tableName, self.selectionFlag, self.selectionArgs)
@@ -1377,7 +1519,7 @@ class Data():
         '''
         dataTable = gridData()[tableName]
         query = dataTable[1][flag]
-        if flag == 'recursive': 
+        if flag == 'recursive':
             self.cursor.execute(query, args)
         elif flag == 'piechart':
             newargs = [args.get('datefrom'), args.get('dateto')]
@@ -1419,7 +1561,7 @@ class Data():
         if id:
             self.cursor.execute(dataTable[4], (id,))
         else:
-            self.cursor.execute(dataTable[4])
+            self.cursor.execute(dataTable[5])
             
     def commit(self):
         self.con.commit()
@@ -1560,6 +1702,8 @@ class Content():
                 ctrl = el[0](self.parent, -1, el[1], style=el[2], name=el[5])
                 if self.args is not None and self.args.get(el[5]) is not None:
                     pyDate = self.args.get(el[5])
+                    if type(pyDate) == str:
+                        pyDate = datetime.datetime.strptime(pyDate, '%d.%m.%Y')
 #                     day, month, year =  str.split('.')
 #                     ctrl.SetValue(datetime.datetime(day=1, month=int(month), year=int(year)))
                     ctrl.SetValue(pydate2wxdate(pyDate))
@@ -1576,12 +1720,14 @@ class Content():
                          fractionWidth = 2,
                          allowNone = False,
                          allowNegative = False)
-                ctrl.SetValue(self.args.get(el[5], 0))
+                ctrl.SetValue(self.args.get(el[5], el[1]))
                 if self.tableName == 'itempayment':
                     ctrl.Bind(wx.EVT_KILL_FOCUS, self.OnChangeNum)
                 if self.tableName == 'itempayment2':
                     ctrl.Bind(wx.EVT_KILL_FOCUS, self.OnChangeNum2)
-
+                if self.tableName == 'category':
+                    if self.args.get('taxrate'):
+                        ctrl.SetValue(self.args.get('taxrate'))
             elif el[0] == MyGrid:
                 ctrl = el[0](self.parent, 'itempayment', gridPopupMenuData('item'), name=el[5])
                 if self.args.get('paymentid'):
@@ -1590,10 +1736,24 @@ class Content():
                     ctrl.table.data = DBData.selectRows('itempayment', ctrl.selectionFlag, ctrl.selectionArgs)
                     ctrl.Reset()
                 else:
-                    ctrl.table.data = DBData.selectRows('itempayment', 'filter', ' where PaymentId is Null')
+                    ctrl.selectionFlag = 'filter'
+                    ctrl.selectionArgs = 'where PaymentId is Null'
+                    ctrl.table.data = DBData.selectRows('itempayment', ctrl.selectionFlag, ctrl.selectionArgs)
                     ctrl.Reset()
             elif el[0] == ActionButtons:
                 ctrl = el[0](self.parent, 'itempayment', wx.FindWindowByName('itempayment', self.parent))
+            elif el[0] == wx.RadioButton:
+                ctrl = el[0](self.parent, -1, el[1], style=el[2], name=el[5])
+                ctrl.Bind(wx.EVT_RADIOBUTTON, self.OnRadio)
+                if el[5] == 'taxfree':
+                    if self.args.get('taxrate') == 0:
+                        ctrl.SetValue(True)
+                            
+                if el[5] == 'tax':
+                    if self.args.get('taxrate') == 0:
+                        ctrl.SetValue(False)
+                    else:
+                        ctrl.SetValue(True)
             else: 
                 ctrl = el[0](self.parent, -1, el[1], style=el[2])
             return ctrl
@@ -1613,7 +1773,7 @@ class Content():
                         ctrl.Bind(wx.EVT_COMBOBOX_CLOSEUP, self.OnCBCloseUp)
                         ctrl.Bind(wx.EVT_COMBOBOX_DROPDOWN, self.OnCBDropDown)
                         self.parent.Bind(wx.EVT_COMBOBOX, self.OnCBSelect, ctrl)
-                        ctrl.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+                        ctrl.Bind(wx.EVT_KEY_DOWN, self.OnCBKeyDown)
                         objName = ctrl.GetName()
                         if objName == 'currency':
 #                             if args is not None: ctrl.SetValue(args.get(el[5])) 
@@ -1649,7 +1809,6 @@ class Content():
                         sizerH.Add(ctrl.actionSizer, el[3], el[4], 10)
                     else: sizerH.Add(ctrl, el[3], el[4], 10)
                 if type(ctrl) == ActionButtons:
-                    print('ctrl == ActionButtons')
                     self.sizerV.Add(sizerH, 1, wx.EXPAND)
                 else: self.sizerV.Add(sizerH, 0, wx.EXPAND)
             else:
@@ -1657,12 +1816,19 @@ class Content():
                 self.parent.widgetList.append(ctrl)
                 self.sizerV.Add(ctrl, element[3], element[4], 10)
     
-    def OnKeyDown(self, event):
+    def OnCBKeyDown(self, event):
         key = event.GetKeyCode()
         if key == wx.WXK_BACK:
             obj = event.GetEventObject()
             obj.SetSelection(wx.NOT_FOUND)
         event.Skip()
+    
+    def OnRadio(self, event):
+        radioSelected = event.GetEventObject()
+        if radioSelected.GetName() == 'tax':
+            wx.FindWindowByName('taxrate').Enable(True)
+        if radioSelected.GetName() == 'taxfree':
+            wx.FindWindowByName('taxrate').Enable(False)
             
     def getSelectionById(self, cb, dataId):
         for i in range(cb.GetCount()):
@@ -1708,9 +1874,7 @@ class Content():
     def OnCBSelect(self, event):
         if event and event.GetEventObject().GetName() == 'category':
             elId = self.parent.cbCategory.GetClientData(self.parent.cbCategory.GetSelection())
-            print('catId',elId)
             selection = DBData.selectRows('item', "filter", " where CategoryID = %s" % elId)
-            print(selection)
             self.cbFilling(self.parent.cbItem, selection)
 #         self.cbItem.SetSelection(self.cbItem.FindString(itemValue))
 #         event.Skip()   
@@ -1779,19 +1943,19 @@ class Content():
         print("Received: ", message, arg, arg2)
         
         if message == 'category':
-            selection = DBData.selectRows('category', "all")
-            self.cbFilling(self.parent.cbCategory, selection)
+            selection = DBData.selectRows('item', "all")
+#             self.cbFilling(self.parent.cbCategory, selection)
             
-            if arg:
-                index = self.getSelectionById(self.parent.cbCategory, int(arg))
-                self.parent.cbCategory.SetSelection(index)
-                
-            else:
-                self.parent.cbCategory.SetSelection(wx.NOT_FOUND)
-            e = wx._core.CommandEvent(commandEventType=wx.wxEVT_COMBOBOX)
-            e.SetEventObject(self.parent.cbCategory)
-            print('e:', e, e.GetEventObject().GetName())
-            self.OnCBSelect(e)
+#             if arg:
+#                 index = self.getSelectionById(self.parent.cbCategory, int(arg))
+#                 self.parent.cbCategory.SetSelection(index)
+#                 
+#             else:
+#                 self.parent.cbCategory.SetSelection(wx.NOT_FOUND)
+#             e = wx._core.CommandEvent(commandEventType=wx.wxEVT_COMBOBOX)
+#             e.SetEventObject(self.parent.cbCategory)
+#             self.OnCBSelect(e)
+            self.cbFilling(self.parent.cbItem, selection)
             if arg2:
                 index = self.getSelectionById(self.parent.cbItem, int(arg2))
                 self.parent.cbItem.SetSelection(index)
